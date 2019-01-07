@@ -1,0 +1,17 @@
+aiohttp==2.3.7
+async-timeout==2.0.1
+asyncio==3.4.3
+backoff==1.6.0
+chardet==3.0.4
+graypy==0.3.1
+idna==2.8
+idna-ssl==1.1.0
+jdatetime==2.1.0
+Khayyam==3.0.17
+multidict==4.5.2
+Pillow==5.2.0
+psycopg2-binary==2.7.5
+redis==3.0.1
+SQLAlchemy==1.2.9
+Unidecode==1.0.22
+yarl==1.2.0
