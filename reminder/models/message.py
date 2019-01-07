@@ -8,7 +8,7 @@ class Message(Base):
     __tablename__ = 'messages'
     id = Column(Integer, primary_key=True)
     reminder_id = Column(Integer, ForeignKey("reminder.id"))
-    sending_time = Column(Date, nullable=False)
+    sending_time = Column(DateTime, nullable=False)
     sent_time = Column(DateTime)
     random_id = Column(String)
     response_date = Column(String)

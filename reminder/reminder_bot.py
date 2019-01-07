@@ -7,7 +7,7 @@ from balebot.models.base_models import UserPeer
 from balebot.models.messages import *
 from balebot.models.messages.banking.money_request_type import MoneyRequestType
 from balebot.utils.logger import Logger
-from balebot.utils.util_functions import generate_random_id
+from balebot.utils.util_functions import generate_random_id, arabic_to_eng_number
 from reminder.models.bot import Bot
 from reminder.callbacks import *
 from reminder.db_handler import generate_receipt_report, add_reminder_to_db, add_receipt, messages_tobe_sent
@@ -62,10 +62,48 @@ def help_me(bot, update):
     dispatcher.finish_conversation(update)
 
 
+def validate_time(input_time, input_date):
+    try:
+        time_format = '%H:%M'
+        time = datetime.datetime.strptime(input_time, time_format)
+        time = time.time().strftime(time_format)
+        now_time = datetime.datetime.now().strftime(time_format)
+        if input_date == JalaliDate().today() and time <= now_time:
+            message = TextMessage(ReadyText.time_is_past)
+            return False, message
+        time = datetime.datetime.strptime(time, time_format)
+        time = time.time()
+        return time, None
+    except:
+        message = TextMessage(ReadyText.wrong_format)
+        return False, message
+
+
+def validate_date(input_date):
+    try:
+        input_date = arabic_to_eng_number(input_date)
+        date = JalaliDate().strptime(input_date, "%Y%m%d")
+        if date < JalaliDate().today():
+            message = TextMessage(ReadyText.time_is_past)
+            return False, message
+        date = date.todate()
+        return date, None
+    except:
+        message = TextMessage(ReadyText.wrong_format)
+        return False, message
+
+
+ADD_REMINDER, SET_TIME, SET_DATE, \
+NUMBER_OF_REPETITIONS, REMINDER_TYPE, REMINDER_CARD_NUMBER, \
+REMINDER_AMOUNT, REMINDER_PICTURE, REMINDER_TEXT, SKIP_PHOTO = range(10)
+
+current_state = "current_state"
+
+
 @dispatcher.message_handler(TemplateResponseFilter(keywords=[ReadyText.add_reminder]))
 def add_reminder(bot, update):
-    state = dispatcher.get_conversation_data(update, "state")
-    if state == "add_reminder":
+    state = dispatcher.get_conversation_data(update, current_state)
+    if state == ADD_REMINDER:
         message = TextMessage(ReadyText.wrong_format)
     else:
         message = TextMessage(ReadyText.enter_reminder_date)
@@ -73,23 +111,19 @@ def add_reminder(bot, update):
               UserData.message: message, UserData.attempt: SendingAttempt.first,
               UserData.logger: my_logger, UserData.bot: bot}
     bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-    dispatcher.set_conversation_data(update, "state", "add_reminder")
+    dispatcher.set_conversation_data(update, current_state, ADD_REMINDER)
     dispatcher.register_conversation_next_step_handler(update, common_handlers + [
         MessageHandler(TextFilter(), set_time),
         MessageHandler(DefaultFilter(), add_reminder)])
 
 
 def set_time(bot, update):
-    state = dispatcher.get_conversation_data(update, "state")
-    if state == "add_reminder":
-        date_str = update.get_effective_message().text
-        try:
-            date = JalaliDate().strptime(date_str, "%Y%m%d")
-            if date < JalaliDate().today():
-                message = TextMessage(ReadyText.time_is_past)
-                print("date: ", date, "today:", datetime.date.today())
-                raise Exception
-            dispatcher.set_conversation_data(update, Attr.date, date)
+    state = dispatcher.get_conversation_data(update, current_state)
+    if state == ADD_REMINDER:
+        input_date = update.get_effective_message().text
+        result, message = validate_date(input_date)
+        if result:
+            dispatcher.set_conversation_data(update, Attr.date, result)
             general_message = TextMessage(ReadyText.enter_reminder_time)
             btn_list = [TemplateMessageButton(ReadyText.default_time, ReadyText.default_time_value, 0)]
             message = TemplateMessage(general_message=general_message, btn_list=btn_list)
@@ -97,47 +131,40 @@ def set_time(bot, update):
                       UserData.message: message, UserData.attempt: SendingAttempt.first, UserData.logger: my_logger,
                       UserData.bot: bot}
             bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-            dispatcher.set_conversation_data(update, "state", "set_time")
+            dispatcher.set_conversation_data(update, current_state, SET_TIME)
             dispatcher.register_conversation_next_step_handler(update, common_handlers + [
-                MessageHandler(TextFilter(), repetition),
-                MessageHandler(TemplateResponseFilter(keywords=[ReadyText.default_time_value]), repetition),
+                MessageHandler(TextFilter(), set_date),
+                MessageHandler(TemplateResponseFilter(keywords=[ReadyText.default_time_value]), set_date),
                 MessageHandler(DefaultFilter(), set_time)])
-        except:
-            message = TextMessage(ReadyText.wrong_format)
+        else:
             kwargs = {UserData.user_peer: update.get_effective_user(), UserData.step_name: Step.ask_time,
                       UserData.message: message, UserData.attempt: SendingAttempt.first,
                       UserData.logger: my_logger, UserData.bot: bot}
             bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-            dispatcher.set_conversation_data(update, "state", "add_reminder")
+            dispatcher.set_conversation_data(update, current_state, ADD_REMINDER)
             dispatcher.register_conversation_next_step_handler(update, common_handlers + [
                 MessageHandler(TextFilter(), set_time),
                 MessageHandler(DefaultFilter(), add_reminder)])
-            return 0
     else:
         message = TextMessage(ReadyText.wrong_format)
         kwargs = {UserData.user_peer: update.get_effective_user(), UserData.step_name: Step.ask_time,
                   UserData.message: message, UserData.attempt: SendingAttempt.first,
                   UserData.logger: my_logger, UserData.bot: bot}
         bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-        dispatcher.set_conversation_data(update, "state", "set_time")
+        dispatcher.set_conversation_data(update, current_state, SET_TIME)
         dispatcher.register_conversation_next_step_handler(update, common_handlers + [
-            MessageHandler(TextFilter(), repetition),
+            MessageHandler(TextFilter(), set_date),
             MessageHandler(DefaultFilter(), set_time)])
 
 
-def repetition(bot, update):
-    state = dispatcher.get_conversation_data(update, "state")
-    if state == "set_time":
-        time_str = update.get_effective_message().text
-        try:
-            date = dispatcher.get_conversation_data(update, Attr.date)
-            valid_time = datetime.datetime.strptime(time_str, '%H:%M')
-            valid_time = valid_time.time().strftime('%H:%M')
-            now_time = datetime.datetime.now().strftime('%H:%M')
-            if date == JalaliDate().today() and valid_time <= now_time:
-                print("date: ", date, "today:", datetime.date.today())
-                raise Exception
-            dispatcher.set_conversation_data(update, Attr.time, valid_time)
+def set_date(bot, update):
+    state = dispatcher.get_conversation_data(update, current_state)
+    if state == SET_TIME:
+        input_time = update.get_effective_message().text
+        input_date = dispatcher.get_conversation_data(update, Attr.date)
+        result, message = validate_time(input_time, input_date)
+        if result:
+            dispatcher.set_conversation_data(update, Attr.time, result)
             general_message = TextMessage(ReadyText.periodic_type_selection)
             btn_list = [TemplateMessageButton(ReadyText.only_once, ReadyText.only_once, 0),
                         TemplateMessageButton(ReadyText.daily, ReadyText.daily, 0),
@@ -148,41 +175,39 @@ def repetition(bot, update):
                       UserData.message: message, UserData.attempt: SendingAttempt.first, UserData.logger: my_logger,
                       UserData.bot: bot}
             bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-            dispatcher.set_conversation_data(update, "state", "repetition")
+            dispatcher.set_conversation_data(update, current_state, SET_DATE)
             dispatcher.register_conversation_next_step_handler(update, common_handlers + [
                 MessageHandler(TemplateResponseFilter(keywords=[ReadyText.only_once]), reminder_type),
                 MessageHandler(TemplateResponseFilter(keywords=[ReadyText.daily, ReadyText.weekly, ReadyText.monthly]),
                                number_of_repetitions),
-                MessageHandler(DefaultFilter(), repetition)])
-        except:
-            message = TextMessage(ReadyText.wrong_format)
+                MessageHandler(DefaultFilter(), set_date)])
+        else:
             kwargs = {UserData.user_peer: update.get_effective_user(), UserData.step_name: Step.ask_time,
                       UserData.message: message, UserData.attempt: SendingAttempt.first,
                       UserData.logger: my_logger, UserData.bot: bot}
             bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-            dispatcher.set_conversation_data(update, "state", "set_time")
+            dispatcher.set_conversation_data(update, current_state, SET_TIME)
             dispatcher.register_conversation_next_step_handler(update, common_handlers + [
-                MessageHandler(TextFilter(), repetition),
-                MessageHandler(TemplateResponseFilter(keywords=[ReadyText.default_time_value]), repetition),
+                MessageHandler(TextFilter(), set_date),
+                MessageHandler(TemplateResponseFilter(keywords=[ReadyText.default_time_value]), set_date),
                 MessageHandler(DefaultFilter(), set_time)])
-            return 0
     else:
         message = TextMessage(ReadyText.wrong_answer)
         kwargs = {UserData.user_peer: update.get_effective_user(), UserData.step_name: Step.period_type,
                   UserData.message: message, UserData.attempt: SendingAttempt.first, UserData.logger: my_logger,
                   UserData.bot: bot}
         bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-        dispatcher.set_conversation_data(update, "state", "repetition")
+        dispatcher.set_conversation_data(update, current_state, SET_DATE)
         dispatcher.register_conversation_next_step_handler(update, common_handlers + [
             MessageHandler(TemplateResponseFilter(keywords=[ReadyText.only_once]), reminder_type),
             MessageHandler(TemplateResponseFilter(keywords=[ReadyText.daily, ReadyText.weekly, ReadyText.monthly]),
                            number_of_repetitions),
-            MessageHandler(DefaultFilter(), repetition)])
+            MessageHandler(DefaultFilter(), set_date)])
 
 
 def number_of_repetitions(bot, update):
-    state = dispatcher.get_conversation_data(update, "state")
-    if state == "repetition":
+    state = dispatcher.get_conversation_data(update, current_state)
+    if state == SET_DATE:
         message = update.get_effective_message()
         dispatcher.set_conversation_data(update, Attr.periodic_type, message.text)
         message = TextMessage(ReadyText.iterate_number_selection)
@@ -192,15 +217,15 @@ def number_of_repetitions(bot, update):
               UserData.message: message, UserData.attempt: SendingAttempt.first, UserData.logger: my_logger,
               UserData.bot: bot}
     bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-    dispatcher.set_conversation_data(update, "state", "number_of_repetitions")
+    dispatcher.set_conversation_data(update, current_state, NUMBER_OF_REPETITIONS)
     dispatcher.register_conversation_next_step_handler(update, common_handlers + [
         MessageHandler(TextFilter(pattern=Pattern.number), reminder_type),
         MessageHandler(DefaultFilter(), number_of_repetitions)])
 
 
 def reminder_type(bot, update):
-    state = dispatcher.get_conversation_data(update, "state")
-    if state == "number_of_repetitions" or state == "repetition":
+    state = dispatcher.get_conversation_data(update, current_state)
+    if state == NUMBER_OF_REPETITIONS or state == SET_DATE:
         if not dispatcher.conversation_data.get(Attr.periodic_type):
             dispatcher.set_conversation_data(update, Attr.iterate_number, 0)
         else:
@@ -217,7 +242,7 @@ def reminder_type(bot, update):
               UserData.bot: bot}
     bot.respond(update, message, success_callback=success_send_message, failure_callback=failure_send_message,
                 kwargs=kwargs)
-    dispatcher.set_conversation_data(update, "state", "reminder_type")
+    dispatcher.set_conversation_data(update, current_state, REMINDER_TYPE)
     dispatcher.register_conversation_next_step_handler(update, common_handlers + [
         MessageHandler(TemplateResponseFilter(keywords=[ReadyText.normal]), reminder_picture),
         MessageHandler(TemplateResponseFilter(keywords=[ReadyText.debt]), reminder_card_number),
@@ -225,8 +250,8 @@ def reminder_type(bot, update):
 
 
 def reminder_card_number(bot, update):
-    state = dispatcher.get_conversation_data(update, "state")
-    if state == "reminder_type":
+    state = dispatcher.get_conversation_data(update, current_state)
+    if state == REMINDER_TYPE:
         dispatcher.set_conversation_data(update, Attr.type, ReminderType.debt)
         message = TextMessage(ReadyText.card_number_entering)
     else:
@@ -235,15 +260,15 @@ def reminder_card_number(bot, update):
               UserData.message: message, UserData.attempt: SendingAttempt.first, UserData.logger: my_logger,
               UserData.bot: bot}
     bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-    dispatcher.set_conversation_data(update, "state", "reminder_card_number")
+    dispatcher.set_conversation_data(update, current_state, REMINDER_CARD_NUMBER)
     dispatcher.register_conversation_next_step_handler(update, common_handlers + [
         MessageHandler(TextFilter(pattern=Pattern.card_number), reminder_amount),
         MessageHandler(DefaultFilter(), reminder_card_number)])
 
 
 def reminder_amount(bot, update):
-    state = dispatcher.get_conversation_data(update, "state")
-    if state == "reminder_card_number":
+    state = dispatcher.get_conversation_data(update, current_state)
+    if state == REMINDER_CARD_NUMBER:
         dispatcher.set_conversation_data(update, Attr.card_number, update.get_effective_message().text)
         message = TextMessage(ReadyText.amount_entering)
     else:
@@ -252,15 +277,15 @@ def reminder_amount(bot, update):
               UserData.message: message, UserData.attempt: SendingAttempt.first, UserData.logger: my_logger,
               UserData.bot: bot}
     bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-    dispatcher.set_conversation_data(update, "state", "reminder_amount")
+    dispatcher.set_conversation_data(update, current_state, REMINDER_AMOUNT)
     dispatcher.register_conversation_next_step_handler(update, common_handlers + [
         MessageHandler(TextFilter(pattern=Pattern.money_amount), reminder_picture),
         MessageHandler(DefaultFilter(), reminder_amount)])
 
 
 def reminder_picture(bot, update):
-    state = dispatcher.get_conversation_data(update, "state")
-    if state == "reminder_amount" or state == "reminder_type":
+    state = dispatcher.get_conversation_data(update, current_state)
+    if state == REMINDER_AMOUNT or state == REMINDER_TYPE:
         if ReminderType.debt == dispatcher.get_conversation_data(update, Attr.type):
             dispatcher.set_conversation_data(update, Attr.money_amount, update.get_effective_message().text)
         else:
@@ -274,7 +299,7 @@ def reminder_picture(bot, update):
               UserData.message: message, UserData.attempt: SendingAttempt.first, UserData.logger: my_logger,
               UserData.bot: bot}
     bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-    dispatcher.set_conversation_data(update, "state", "reminder_picture")
+    dispatcher.set_conversation_data(update, current_state, REMINDER_PICTURE)
     dispatcher.register_conversation_next_step_handler(update, common_handlers + [
         MessageHandler(TemplateResponseFilter(keywords=[ReadyText.no_picture_needed]), reminder_text_without_photo),
         MessageHandler(PhotoFilter(), reminder_text),
@@ -282,8 +307,8 @@ def reminder_picture(bot, update):
 
 
 def reminder_text(bot, update):
-    state = dispatcher.get_conversation_data(update, "state")
-    if state == "reminder_picture":
+    state = dispatcher.get_conversation_data(update, current_state)
+    if state == REMINDER_PICTURE:
         message = update.get_effective_message()
         dispatcher.set_conversation_data(update, Attr.file_id, message.file_id)
         dispatcher.set_conversation_data(update, Attr.file_access_hash, message.access_hash)
@@ -295,15 +320,15 @@ def reminder_text(bot, update):
               UserData.message: message, UserData.attempt: SendingAttempt.first, UserData.logger: my_logger,
               UserData.bot: bot}
     bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-    dispatcher.set_conversation_data(update, "state", "reminder_text")
+    dispatcher.set_conversation_data(update, current_state, REMINDER_TEXT)
     dispatcher.register_conversation_next_step_handler(update,
                                                        [MessageHandler(TextFilter(), reminder_finished),
                                                         MessageHandler(DefaultFilter(), reminder_text)])
 
 
 def reminder_text_without_photo(bot, update):
-    state = dispatcher.get_conversation_data(update, "state")
-    if state == "reminder_picture":
+    state = dispatcher.get_conversation_data(update, current_state)
+    if state == REMINDER_PICTURE:
         message = TextMessage(ReadyText.enter_reminder_text)
     else:
         message = TextMessage(ReadyText.wrong_answer_pls_text)
@@ -311,7 +336,7 @@ def reminder_text_without_photo(bot, update):
               UserData.message: message,
               UserData.attempt: SendingAttempt.first, UserData.logger: my_logger, UserData.bot: bot}
     bot.respond(update, message, success_send_message, failure_send_message, kwargs=kwargs)
-    dispatcher.set_conversation_data(update, "state", "text")
+    dispatcher.set_conversation_data(update, current_state, SKIP_PHOTO)
     dispatcher.register_conversation_next_step_handler(update,
                                                        [MessageHandler(TextFilter(), reminder_finished),
                                                         MessageHandler(DefaultFilter(), reminder_text_without_photo)])

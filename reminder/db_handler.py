@@ -4,7 +4,6 @@ import os
 
 import jdatetime
 from khayyam import JalaliDate
-from sqlalchemy import cast, Date
 from reminder.models.base import Session
 from reminder.models.constants import Attr, ReadyText, MessageStatus
 from reminder.models.message import Message
@@ -23,18 +22,22 @@ def add_reminder_to_db(reminder):
                             reminder.get(Attr.file_access_hash),
                             reminder.get(Attr.file_size))
     session.add(reminder_obj)
-    start_datetime = reminder.get(Attr.date)
-    start_datetime = start_datetime.todate()
+
+    date = reminder.get(Attr.date)
+    time = reminder.get(Attr.time)
+    print(type(date), date)
+    print(type(time), time)
+    remind_datetime = datetime.datetime.combine(date, time)
     if reminder.get(Attr.periodic_type) != ReadyText.monthly:
         time_delta = time_delta_func(reminder.get(Attr.periodic_type))
         for i in range(reminder[Attr.iterate_number] + 1):
-            message = Message(reminder_obj, sending_time=(start_datetime + time_delta * i))
+            message = Message(reminder_obj, sending_time=(remind_datetime + time_delta * i))
             session.add(message)
     else:
         time_delta = time_delta_func(reminder.get(Attr.periodic_type))
         for i in range(reminder[Attr.iterate_number] + 1):
-            s_date = start_datetime + time_delta * i
-            day = start_datetime.day
+            s_date = remind_datetime + time_delta * i
+            day = remind_datetime.day
             sending_time = None
             is_valid_date = False
             while is_valid_date is False:
@@ -93,8 +96,7 @@ def add_receipt(purchase_message_date, payer, receiver, is_expenditure, status, 
 
 def messages_tobe_sent():
     result = session.query(Message).filter(Message.sent != MessageStatus.sent).filter(
-        Message.sending_time == datetime.date.today()).all()
-    print(result)
+        Message.sending_time == datetime.datetime.now().strftime("%Y-%m-%d %H:%M")).all()
     return result
 
 
