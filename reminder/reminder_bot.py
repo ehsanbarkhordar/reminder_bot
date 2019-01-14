@@ -232,8 +232,8 @@ def reminder_type(bot, update):
             message = update.get_effective_message()
             dispatcher.set_conversation_data(update, Attr.iterate_number, int(message.text))
         general_message = TextMessage(ReadyText.notification_type_selection)
-        btn_list = [TemplateMessageButton(ReadyText.normal, ReadyText.normal, 0),
-                    TemplateMessageButton(ReadyText.debt, ReadyText.debt, 0)]
+        btn_list = [TemplateMessageButton(ReadyText.debt, ReadyText.debt, 0),
+                    TemplateMessageButton(ReadyText.normal, ReadyText.normal, 0)]
         message = TemplateMessage(general_message=general_message, btn_list=btn_list)
     else:
         message = TextMessage(ReadyText.wrong_answer)

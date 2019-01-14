@@ -3,7 +3,7 @@ import os
 
 class BotConfig:
     receipts_report_name = os.environ.get('RECEIPTS_REPORT_NAME', "receipts_report.csv")
-    bot_token = os.environ.get('TOKEN', "5cc08d0be38e27566dfb1215c3002d52b8788754")
+    bot_token = os.environ.get('TOKEN', "17fcfa921bae323895d2d70e6d3d998a2b3d000e")
     db_message_checking_interval = int(os.environ.get('MESSAGE_DB_CHECK_INTERVAL', 30))
     system_local = os.environ.get('SYSTEM_LOCAL', "fa_IR")
     accepted_datetime_format = os.environ.get('ACCEPTED_DATETIME_FORMAT', "%Y-%m-%d %H:%M")

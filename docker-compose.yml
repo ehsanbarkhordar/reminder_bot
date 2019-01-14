@@ -1,57 +1,45 @@
-version: '3'
-
+version: '3.0'
 services:
+  pg_reminder_bot:
+    image: registry2.bale.ai:2443/balepostgres:1.6.0
+    container_name: pg_reminder_bot
+    restart: always
+    environment:
+      - POSTGRES_USER=reminder_bot
+      - POSTGRES_PASSWORD=postgres123456
+      - POSTGRES_DB=reminder_db
+      - TZ=Asia/Tehran
+    volumes:
+      - /home/docker/volumes/pg_reminder_bot/postgres/:/var/lib/postgresql/data/
+    ports:
+      - "5500:5432"
 
   reminder_bot:
-    image: reminder_bot 1.0.0
+    image: registry2.bale.ai:2443/reminder_bot:0.0-0
     container_name: reminder_bot
     environment:
-      # PostgreSQL Config
+      #   PostgreSQL Config
       - POSTGRES_USER=reminder_bot
-      - POSTGRES_PASSWORD=pass
+      - POSTGRES_PASSWORD=postgres123456
       - POSTGRES_DB=reminder_db
-      - POSTGRES_PORT=5432
       - POSTGRES_HOST=pg_reminder_bot
-      # Config
+      - POSTGRES_PORT=5432
+      #   Config
       - BASE_URL=wss://api.bale.ai/v1/bots/
-      - TOKEN=0f8c34cd08e81d3604f23f712a095f167dfc37d8
-      - RECEIPTS_REPORT_NAME=receipt_report.csv
-      - SYSTEM_LOCAL=fa_IR
-      - MESSAGE_DB_CHECK_INTERVAL=60
-      - ACCEPTED_DATETIME_FORMAT=%Y-%m-%d %H:%M
-      - RESENDING_MAX_TRY=5
-      - RE_UPLOADING_MAX_TRY=5
-      # Log config
-      - USE_GRAYLOG=3
-      - SOURCE=reminder_bot
-      - GRAYLOG_HOST=prd-graylog-001.c002.obale.ir
+      - TOKEN=17fcfa921bae323895d2d70e6d3d998a2b3d000e
+      - CHECK_INTERVAL=0.5
+      - TIME_OUT_WAIT_FOR_CHECK_CHECK_CLIENT_QUEUE=60
+      - TIME_OUT_FOR_BLOCK_ON_CLIENT_QUEUE=0.5
+      - TIME_OUT_FOR_BLOCK_ON_CLIENT_QUEUE=5
+      #   Log config
+      - USE_GRAYLOG=2
+      - SOURCE=reminder_bot_source
+      - GRAYLOG_HOST=192.168.21.113
       - GRAYLOG_PORT=12201
       - LOG_LEVEL=20
-      - LOG_FACILITY_NAME=bale_bot
-
-      - SDK_USE_GRAYLOG=1
-      - LOG_SOURCE=bot_source
-      - SDK_GRAYLOG_HOST=prd-graylog-001.c002.obale.ir
-      - SDK_GRAYLOG_PORT=12201
-      - SDK_LOG_LEVEL=20
-      - SDK_LOG_FACILITY_NAME=python_bale_bot
+      - LOG_FACILITY_NAME=reminder_bot_facility
       - MONITORING_HASH=cabb3f498ac5a037f669f658f1be08c3
     depends_on:
       - pg_reminder_bot
-    volumes:
-      - .:/reminder_bot
     restart: always
 
-  pg_reminder_bot:
-    image: registry.bale.ai:2443/balepostgres:1.1.2
-    container_name: pg_reminder_bot
-
-    environment:
-      - POSTGRES_USER=reminder_bot
-      - POSTGRES_PASSWORD=pass
-      - POSTGRES_DB=reminder_db
-      - TZ=Asia/Tehran
-    ports:
-      - 5432:5432
-    volumes:
-      - /reminder_db:/var/lib/postgresql
